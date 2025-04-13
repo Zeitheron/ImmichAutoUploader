@@ -1,4 +1,4 @@
-package dev.zeith.immich;
+package dev.zeith.immich.io;
 
 import java.io.*;
 import java.math.BigInteger;

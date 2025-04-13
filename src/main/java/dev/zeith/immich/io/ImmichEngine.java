@@ -1,6 +1,8 @@
-package dev.zeith.immich;
+package dev.zeith.immich.io;
 
 import com.google.gson.*;
+import com.google.gson.reflect.TypeToken;
+import org.jetbrains.annotations.NotNull;
 
 import java.io.*;
 import java.net.URI;
@@ -19,6 +21,9 @@ public class ImmichEngine
 	private final String immichUrl;
 	private final String apiKey;
 	
+	private Map<String, Set<String>> mediaTypesCache;
+	private Set<String> flatMediaTypesCache;
+	
 	public ImmichEngine(HttpClient httpClient, Gson gson, String immichUrl, String API_KEY)
 	{
 		this.httpClient = httpClient;
@@ -27,9 +32,41 @@ public class ImmichEngine
 		this.apiKey = API_KEY;
 	}
 	
+	public void resolveMediaTypes()
+			throws IOException, InterruptedException
+	{
+		if(mediaTypesCache != null && flatMediaTypesCache != null) return;
+		
+		Map<String, Set<String>> mediaTypes = gson.fromJson(
+				httpClient.send(
+						authorized("server/media-types")
+								.GET()
+								.build(),
+						HttpResponse.BodyHandlers.ofString()
+				).body(),
+				new TypeToken<>() {}
+		);
+		
+		this.mediaTypesCache = mediaTypes.entrySet().stream().map(e -> Map.entry(e.getKey(), Set.copyOf(e.getValue()))).collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+		this.flatMediaTypesCache = Set.copyOf(mediaTypes.values().stream().flatMap(Set::stream).toList());
+	}
+	
+	public @NotNull Set<String> getFlatMediaTypesCache()
+	{
+		return flatMediaTypesCache;
+	}
+	
+	public @NotNull Map<String, Set<String>> getMediaTypesCache()
+			throws IOException, InterruptedException
+	{
+		return mediaTypesCache;
+	}
+	
 	public List<File> bulkUploadCheck(List<File> files)
 			throws IOException, InterruptedException
 	{
+		if(files.isEmpty()) return List.of();
+		
 		var json = new JsonObject();
 		
 		Map<String, File> idMap = files.stream().collect(Collectors.toMap(f -> UUID.randomUUID().toString(), UnaryOperator.identity()));

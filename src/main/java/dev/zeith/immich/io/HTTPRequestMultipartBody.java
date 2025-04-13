@@ -1,4 +1,6 @@
-package dev.zeith.immich;
+package dev.zeith.immich.io;
+
+import lombok.*;
 
 import java.io.*;
 import java.math.BigInteger;
@@ -7,25 +9,17 @@ import java.nio.file.Files;
 import java.security.SecureRandom;
 import java.util.*;
 
+@Getter
 public class HTTPRequestMultipartBody
 {
-	private final byte[] bytes;
+	private final byte[] body;
 	
-	public String getBoundary()
-	{
-		return boundary;
-	}
-	
-	public void setBoundary(String boundary)
-	{
-		this.boundary = boundary;
-	}
-	
+	@Setter
 	private String boundary;
 	
-	private HTTPRequestMultipartBody(byte[] bytes, String boundary)
+	private HTTPRequestMultipartBody(byte[] body, String boundary)
 	{
-		this.bytes = bytes;
+		this.body = body;
 		this.boundary = boundary;
 	}
 	
@@ -34,50 +28,15 @@ public class HTTPRequestMultipartBody
 		return "multipart/form-data; boundary=" + this.getBoundary();
 	}
 	
-	public byte[] getBody()
-	{
-		return this.bytes;
-	}
-	
 	public static class Builder
 	{
-		private final String DEFAULT_MIMETYPE = "text/plain";
-		
+		@Getter
+		@Setter
 		public static class MultiPartRecord
 		{
 			private String fieldName;
 			private String filename;
 			private Object content;
-			
-			public String getFieldName()
-			{
-				return fieldName;
-			}
-			
-			public void setFieldName(String fieldName)
-			{
-				this.fieldName = fieldName;
-			}
-			
-			public String getFilename()
-			{
-				return filename;
-			}
-			
-			public void setFilename(String filename)
-			{
-				this.filename = filename;
-			}
-			
-			public Object getContent()
-			{
-				return content;
-			}
-			
-			public void setContent(Object content)
-			{
-				this.content = content;
-			}
 		}
 		
 		List<MultiPartRecord> parts;
@@ -123,32 +82,38 @@ public class HTTPRequestMultipartBody
 			for(MultiPartRecord record : parts)
 			{
 				StringBuilder stringBuilder = new StringBuilder();
-				stringBuilder.append("--" + boundary + "\r\n" + "Content-Disposition: form-data; name=\"" + record.getFieldName());
+				stringBuilder.append("--").append(boundary).append("\r\n").append("Content-Disposition: form-data; name=\"").append(record.getFieldName());
 				if(record.getFilename() != null)
 				{
-					stringBuilder.append("\"; filename=\"" + record.getFilename());
+					stringBuilder.append("\"; filename=\"").append(record.getFilename());
 				}
 				out.write(stringBuilder.toString().getBytes(StandardCharsets.UTF_8));
 				out.write(("\"\r\n").getBytes(StandardCharsets.UTF_8));
 				Object content = record.getContent();
-				if(content instanceof String)
+				switch(content)
 				{
-					out.write(("\r\n").getBytes(StandardCharsets.UTF_8));
-					out.write(((String) content).getBytes(StandardCharsets.UTF_8));
-				} else if(content instanceof byte[])
-				{
-					out.write(("Content-Type: application/octet-stream\r\n\r\n").getBytes(StandardCharsets.UTF_8));
-					out.write((byte[]) content);
-				} else if(content instanceof File)
-				{
-					out.write(("Content-Type: application/octet-stream\r\n\r\n").getBytes(StandardCharsets.UTF_8));
-					Files.copy(((File) content).toPath(), out);
-				} else
-				{
-					out.write(("Content-Type: application/octet-stream\r\n\r\n").getBytes(StandardCharsets.UTF_8));
-					ObjectOutputStream objectOutputStream = new ObjectOutputStream(out);
-					objectOutputStream.writeObject(content);
-					objectOutputStream.flush();
+					case String s ->
+					{
+						out.write(("\r\n").getBytes(StandardCharsets.UTF_8));
+						out.write(s.getBytes(StandardCharsets.UTF_8));
+					}
+					case byte[] bytes1 ->
+					{
+						out.write(("Content-Type: application/octet-stream\r\n\r\n").getBytes(StandardCharsets.UTF_8));
+						out.write(bytes1);
+					}
+					case File file ->
+					{
+						out.write(("Content-Type: application/octet-stream\r\n\r\n").getBytes(StandardCharsets.UTF_8));
+						Files.copy(file.toPath(), out);
+					}
+					case null, default ->
+					{
+						out.write(("Content-Type: application/octet-stream\r\n\r\n").getBytes(StandardCharsets.UTF_8));
+						ObjectOutputStream objectOutputStream = new ObjectOutputStream(out);
+						objectOutputStream.writeObject(content);
+						objectOutputStream.flush();
+					}
 				}
 				out.write("\r\n".getBytes(StandardCharsets.UTF_8));
 			}

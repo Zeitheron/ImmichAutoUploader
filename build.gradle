@@ -1,19 +1,58 @@
 plugins {
+    id 'idea'
     id 'java'
+    id "java-library"
 }
 
 group = 'dev.zeith.immich'
-version = '1.0-SNAPSHOT'
+version = '1.0'
 
 repositories {
     mavenCentral()
 }
 
 dependencies {
-    testImplementation platform('org.junit:junit-bom:5.10.0')
-    testImplementation 'org.junit.jupiter:junit-jupiter'
+    api "org.jetbrains:annotations:$jb_annotations"
+    api "com.google.code.gson:gson:$gson"
+
+    ////// UTILITY STUFF //////
+    compileOnly "org.projectlombok:lombok:$lombok"
+    annotationProcessor "org.projectlombok:lombok:$lombok"
+    testCompileOnly "org.projectlombok:lombok:$lombok"
+    testAnnotationProcessor "org.projectlombok:lombok:$lombok"
+    compileOnly "org.jetbrains:annotations:$jb_annotations"
+    testCompileOnly "org.jetbrains:annotations:$jb_annotations"
+    ///////////////////////////
 }
 
-test {
-    useJUnitPlatform()
+tasks.register("deploy app") {
+    group = "build"
+    dependsOn "build"
+    def depDir = file("deploy")
+    if (depDir.file) depDir.delete()
+
+    doLast {
+        def libsDir = new File(depDir, "libraries")
+        libsDir.mkdirs()
+
+        java.nio.file.Files.walk(libsDir.toPath())
+                .map { it.toFile() }
+                .filter { it.isFile() }
+                .each { it.delete() }
+
+        def copyFile = { File f, File f2 -> java.nio.file.Files.copy(f.toPath(), f2.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING) }
+
+        def mainFile = tasks.jar.outputs.files.singleFile
+
+        copyFile(mainFile, new File(libsDir, mainFile.name))
+
+        java.nio.file.Files.writeString(depDir.toPath().resolve("Start.bat"), """@echo off
+%JAVA21_HOME%/bin/java -cp "libraries"/*;. $mainClass""")
+
+        configurations.runtimeClasspath.resolvedConfiguration.resolvedArtifacts.each { artifact ->
+            def id = artifact.moduleVersion.id
+            def fl = new File(libsDir, (id.group + "." + id.name + "." + id.version + ".jar"))
+            copyFile(artifact.file, fl)
+        }
+    }
 }
